@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Outil Audio & QR Code - L'Oréal</title>
+    <!-- Inclusion de la bibliothèque QR Code -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f9;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 600px;
+            margin-bottom: 20px;
+        }
+        h2 { color: #2649B2; margin-top: 0; }
+        .section { margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid #eee; }
+        .section:last-child { border-bottom: none; }
+        
+        /* Styles Boutons */
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: 0.3s;
+            margin-right: 10px;
+        }
+        .btn-record { background-color: #4A74F3; color: white; }
+        .btn-stop { background-color: #d9534f; color: white; }
+        .btn-download { background-color: #2649B2; color: white; margin-top: 10px; display: none; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+
+        /* Styles QR Code */
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            box-sizing: border-box;
+        }
+        #qrcode {
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .status { font-size: 0.9em; margin-top: 10px; color: #666; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- SECTION 1 : ENREGISTREMENT AUDIO -->
+        <div class="section">
+            <h2>1. Enregistreur Audio</h2>
+            <div id="controls">
+                <button id="startBtn" class="btn-record">Démarrer l'enregistrement</button>
+                <button id="stopBtn" class="btn-stop" disabled>Arrêter</button>
+            </div>
+            <div class="status" id="recordStatus">Prêt à enregistrer.</div>
+            <audio id="audioPlayback" controls style="display:none; margin-top: 15px; width: 100%;"></audio>
+            <a id="downloadLink" class="btn-download" style="text-decoration: none; display: inline-block; text-align: center;">Télécharger l'audio</a>
+        </div>
+
+        <!-- SECTION 2 : GÉNÉRATEUR DE QR CODE -->
+        <div class="section">
+            <h2>2. Générateur de QR Code</h2>
+            <p>Entrez l'URL ci-dessous pour mettre à jour le QR Code en temps réel :</p>
+            <input type="text" id="urlInput" placeholder="https://www.loreal.com" value="https://www.loreal.com">
+            <div id="qrcode"></div>
+        </div>
+    </div>
+
+    <script>
+        // --- LOGIQUE AUDIO ---
+        let mediaRecorder;
+        let audioChunks = [];
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const playback = document.getElementById('audioPlayback');
+        const downloadLink = document.getElementById('downloadLink');
+        const recordStatus = document.getElementById('recordStatus');
+
+        startBtn.addEventListener('click', async () => {
+            audioChunks = [];
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                
+                mediaRecorder.ondataavailable = (event) => {
+                    audioChunks.push(event.data);
+                };
+
+                mediaRecorder.onstop = () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    playback.src = audioUrl;
+                    playback.style.display = 'block';
+                    
+                    downloadLink.href = audioUrl;
+                    downloadLink.download = 'enregistrement_loreal.wav';
+                    downloadLink.style.display = 'inline-block';
+                    recordStatus.textContent = "Enregistrement terminé.";
+                };
+
+                mediaRecorder.start();
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                recordStatus.textContent = "Enregistrement en cours...";
+            } catch (err) {
+                alert("Erreur d'accès au micro : " + err);
+            }
+        });
+
+        stopBtn.addEventListener('click', () => {
+            mediaRecorder.stop();
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+        });
+
+        // --- LOGIQUE QR CODE ---
+        const urlInput = document.getElementById('urlInput');
+        const qrcodeContainer = document.getElementById('qrcode');
+
+        // Initialisation du QR Code
+        const qrcode = new QRCode(qrcodeContainer, {
+            text: urlInput.value,
+            width: 200,
+            height: 200,
+            colorDark: "#2649B2",
+            colorLight: "#ffffff",
+            correctLevel: QRCode.CorrectLevel.H
+        });
+
+        // Mise à jour à chaque saisie
+        urlInput.addEventListener('input', () => {
+            qrcode.clear();
+            if (urlInput.value.trim() !== "") {
+                qrcode.makeCode(urlInput.value);
+            }
+        });
+    </script>
+</body>
+</html>
+
