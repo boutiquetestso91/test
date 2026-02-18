@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Upload vers GitHub</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; line-height: 1.6; }
+        .container { max-width: 500px; margin: auto; border: 1px solid #ccc; padding: 20px; border-radius: 8px; }
+        input, button { margin-top: 10px; display: block; width: 100%; padding: 10px; }
+        #status { margin-top: 15px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Uploader monfichier.wav</h2>
+        <p>Sélectionnez un fichier .wav pour le publier sur votre site.</p>
+        
+        <input type="file" id="fileInput" accept=".wav">
+        <input type="password" id="tokenInput" placeholder="Entrez votre GitHub Personal Access Token">
+        <button onclick="uploadFile()">Mettre en ligne le fichier</button>
+        
+        <div id="status"></div>
+    </div>
+
+    <script>
+        async function uploadFile() {
+            const fileInput = document.getElementById('fileInput');
+            const token = document.getElementById('tokenInput').value;
+            const status = document.getElementById('status');
+            
+            if (!fileInput.files[0] || !token) {
+                status.innerText = "❌ Veuillez sélectionner un fichier et entrer un Token.";
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+
+            status.innerText = "⏳ Préparation du fichier...";
+
+            reader.onload = async function() {
+                const content = reader.result.split(',')[1]; // Récupère le base64
+                const path = "monfichier.wav"; // Nom fixe à la racine
+                const repo = "boutiquetestso91/test";
+                const url = `https://api.github.com/repos/${repo}/contents/${path}`;
+
+                try {
+                    // 1. On vérifie si le fichier existe déjà pour récupérer son SHA (nécessaire pour l'update)
+                    let sha = "";
+                    const checkRes = await fetch(url);
+                    if (checkRes.ok) {
+                        const data = await checkRes.json();
+                        sha = data.sha;
+                    }
+
+                    // 2. Upload/Update du fichier
+                    const response = await fetch(url, {
+                        method: "PUT",
+                        headers: {
+                            "Authorization": `token ${token}`,
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            message: "Mise à jour de monfichier.wav via l'interface web",
+                            content: content,
+                            sha: sha // Présent si update, vide si création
+                        })
+                    });
+
+                    if (response.ok) {
+                        status.innerHTML = `✅ Succès !<br>Le fichier sera accessible d'ici 1-2 min ici :<br><a href="https://boutiquetestso91.github.io/test/monfichier.wav">https://boutiquetestso91.github.io/test/monfichier.wav</a>`;
+                    } else {
+                        const errorData = await response.json();
+                        status.innerText = "❌ Erreur API : " + errorData.message;
+                    }
+                } catch (error) {
+                    status.innerText = "❌ Erreur réseau : " + error.message;
+                }
+            };
+
+            reader.readAsDataURL(file);
+        }
+    </script>
+</body>
+</html>
