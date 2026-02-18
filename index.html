@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enregistreur & Upload GitHub</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; background-color: #f4f7f6; color: #333; }
+        .container { max-width: 600px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h2 { color: #2c3e50; text-align: center; margin-bottom: 25px; }
+        
+        .section { border-bottom: 1px solid #eee; padding-bottom: 20px; margin-bottom: 20px; }
+        .section:last-child { border-bottom: none; }
+        
+        button { cursor: pointer; padding: 12px; border-radius: 6px; border: none; font-weight: bold; transition: all 0.3s; width: 100%; margin-top: 10px; }
+        
+        #recordBtn { background-color: #e74c3c; color: white; }
+        #recordBtn.recording { background-color: #c0392b; animation: pulse 1.5s infinite; }
+        #stopBtn { background-color: #95a5a6; color: white; display: none; }
+        #uploadBtn { background-color: #27ae60; color: white; margin-top: 20px; }
+        button:disabled { background-color: #bdc3c7 !important; cursor: not-allowed; }
+        
+        audio { width: 100%; margin-top: 15px; border-radius: 8px; }
+        input[type="password"] { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; margin-top: 10px; }
+        
+        #status { margin-top: 20px; padding: 15px; border-radius: 6px; font-size: 0.9em; display: none; text-align: center; }
+        .success { background-color: #d4edda; color: #155724; display: block !important; }
+        .error { background-color: #f8d7da; color: #721c24; display: block !important; }
+
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>🎙 Enregistreur vers GitHub</h2>
+
+    <!-- Section 1: Enregistrement -->
+    <div class="section">
+        <label><strong>1. Enregistrez votre message</strong></label>
+        <button id="recordBtn">🔴 Commencer l'enregistrement</button>
+        <button id="stopBtn">⏹ Arrêter</button>
+        <audio id="audioPlayback" controls style="display:none;"></audio>
+    </div>
+
+    <!-- Section 2: Configuration & Envoi -->
+    <div class="section">
+        <label><strong>2. Publication sur GitHub</strong></label>
+        <input type="password" id="tokenInput" placeholder="Collez votre GitHub Token (PAT)">
+        <button id="uploadBtn" disabled>☁ Mettre en ligne (monfichier.wav)</button>
+    </div>
+
+    <div id="status"></div>
+</div>
+
+<script>
+    let mediaRecorder;
+    let audioChunks = [];
+    let audioBlob;
+    
+    const recordBtn = document.getElementById('recordBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const audioPlayback = document.getElementById('audioPlayback');
+    const status = document.getElementById('status');
+
+    // --- LOGIQUE D'ENREGISTREMENT ---
+    recordBtn.onclick = async () => {
+        audioChunks = [];
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        
+        mediaRecorder.ondataavailable = (event) => {
+            audioChunks.push(event.data);
+        };
+
+        mediaRecorder.onstop = () => {
+            audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+            const audioUrl = URL.createObjectURL(audioBlob);
+            audioPlayback.src = audioUrl;
+            audioPlayback.style.display = 'block';
+            uploadBtn.disabled = false;
+        };
+
+        mediaRecorder.start();
+        recordBtn.style.display = 'none';
+        stopBtn.style.display = 'block';
+        status.innerText = "";
+        status.className = "";
+    };
+
+    stopBtn.onclick = () => {
+        mediaRecorder.stop();
+        recordBtn.style.display = 'block';
+        stopBtn.style.display = 'none';
+    };
+
+    // --- LOGIQUE D'UPLOAD ---
+    uploadBtn.onclick = async () => {
+        const token = document.getElementById('tokenInput').value;
+        if (!token) {
+            showStatus("❌ Veuillez coller votre Token de sécurité.", "error");
+            return;
+        }
+
+        showStatus("⏳ Envoi vers GitHub en cours...", "");
+        
+        // Conversion du Blob en Base64
+        const reader = new FileReader();
+        reader.readAsDataURL(audioBlob);
+        reader.onloadend = async () => {
+            const base64Data = reader.result.split(',')[1];
+            const repo = "boutiquetestso91/test";
+            const path = "monfichier.wav";
+            const url = `https://api.github.com/repos/${repo}/contents/${path}`;
+
+            try {
+                // Vérifier si le fichier existe pour récupérer le SHA (pour mise à jour)
+                let sha = "";
+                const checkRes = await fetch(url, {
+                    headers: { "Authorization": `token ${token}` }
+                });
+                if (checkRes.ok) {
+                    const data = await checkRes.json();
+                    sha = data.sha;
+                }
+
+                // Upload
+                const response = await fetch(url, {
+                    method: "PUT",
+                    headers: {
+                        "Authorization": `token ${token}`,
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        message: "Nouvel enregistrement audio via l'interface web",
+                        content: base64Data,
+                        sha: sha
+                    })
+                });
+
+                if (response.ok) {
+                    showStatus(`✅ Succès !<br>Le fichier sera prêt d'ici 1-2 min ici :<br><a href="https://boutiquetestso91.github.io/test/monfichier.wav" target="_blank">Ouvrir le lien .wav</a>`, "success");
+                } else {
+                    const error = await response.json();
+                    showStatus("❌ Erreur GitHub : " + error.message, "error");
+                }
+            } catch (err) {
+                showStatus("❌ Erreur réseau : " + err.message, "error");
+            }
+        };
+    };
+
+    function showStatus(msg, type) {
+        status.innerHTML = msg;
+        status.className = type;
+        status.style.display = 'block';
+    }
+</script>
+
+</body>
+</html>
